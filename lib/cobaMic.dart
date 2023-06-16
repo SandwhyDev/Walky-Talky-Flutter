@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:mic_stream/mic_stream.dart';
+
+const AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 
 void main() {
   runApp(SimpleMicStreamApp(
@@ -21,7 +26,12 @@ class SimpleMicStreamApp extends StatefulWidget {
 class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
   late IO.Socket socket;
   bool isRecording = false;
-  String receivedMessage = '';
+  Stream? stream;
+  StreamSubscription? listener;
+  late int bytesPerSample;
+  late int samplesPerSecond;
+  int? localMax;
+  int? localMin;
 
   @override
   void initState() {
@@ -53,22 +63,51 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     // setState(() {
     //   isRecording = !isRecording;
     // });
-    // Send data through socket
 
-    setState(() {
-      if (isRecording) {
-        socket.emit('audioMessage', [widget.title, widget.user]);
-        // print("recording true");
-        return;
-      }
+    if (isRecording) {
+      startMicStream();
+    } else {
+      stopMicStream();
+    }
+  }
+
+  Future<void> startMicStream() async {
+    MicStream.shouldRequestPermission(true);
+
+    stream = await MicStream.microphone(
+        audioSource: AudioSource.DEFAULT,
+        // sampleRate: 1000 * (rng.nextInt(50) + 30),
+        sampleRate: 48000,
+        channelConfig: ChannelConfig.CHANNEL_IN_MONO,
+        audioFormat: AUDIO_FORMAT);
+
+    bytesPerSample = (await MicStream.bitDepth)! ~/ 8;
+    samplesPerSecond = (await MicStream.sampleRate)!.toInt();
+    localMax = null;
+    localMin = null;
+
+    listener = stream!.listen(_calculateSamples, onError: (error) {
+      print("error listen : ${error}");
     });
+  }
 
-    // print("recording false");
+  void _calculateSamples(samples) {
+    if (samples.isNotEmpty) {
+      print(samples);
+
+      socket.emit('audioMessage', [samples, widget.title]);
+    }
+  }
+
+  void stopMicStream() {
+    listener?.cancel();
+    listener = null;
+    stream = null;
   }
 
   void _listenAudioFinal() {
     socket.on('audioFinal', (data) {
-      // Meng-handle data audio final yang diterima dari server
+      // Handle received audioFinal data from the server
       print('pesan : $data');
     });
   }
@@ -85,10 +124,10 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
             onPressed: () {
               Navigator.pop(context);
               socket.emit("user-out-room", [widget.user, widget.title]);
-              socket.onDisconnect((_) {
-                print('Disconnected');
-                // Handle socket disconnection
-              });
+              // socket.onDisconnect((_) {
+              //   print('Disconnected');
+              //   // Handle socket disconnection
+              // });
             },
           ),
           title: Row(
