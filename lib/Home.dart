@@ -1,8 +1,10 @@
+import 'package:coba/newMic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'DetailPage.dart';
 import 'dart:math';
 import "testMic.dart";
+import "cobaMic.dart";
 
 void main() {
   runApp(MaterialApp(
@@ -124,10 +126,9 @@ class Home extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => DetailPage(
-                                  title: title,
-                                  desc: desc,
-                                  randomNumber: roomName,
+                                builder: (context) => SimpleMicStreamApp(
+                                  user: title,
+                                  title: roomName,
                                 ),
                               ),
                             );
@@ -157,10 +158,9 @@ class Home extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => MicStreamExampleApp(
-                      title: title,
-                      desc: desc,
-                      randomNumber: randomNumber,
+                    builder: (context) => SimpleMicStreamApp(
+                      user: title,
+                      title: randomNumber,
                     ),
                     // builder: (context) => MicStreamExampleApp(),
                   ),

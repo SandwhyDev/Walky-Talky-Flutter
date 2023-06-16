@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:core';
-
 import 'package:flutter/material.dart';
-
 import 'package:mic_stream/mic_stream.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 enum Command {
   start,
@@ -13,12 +12,17 @@ enum Command {
 }
 
 const AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
+IO.Socket socket = IO.io('http://192.168.0.42:3030',
+    IO.OptionBuilder().setTransports(['websocket']).build());
 
-void main() => runApp(MicStreamExampleApp(
-      desc: '',
-      randomNumber: "",
-      title: '',
-    ));
+void main() {
+  print("socket");
+  runApp(MicStreamExampleApp(
+    desc: '',
+    randomNumber: "",
+    title: '',
+  ));
+}
 
 class MicStreamExampleApp extends StatefulWidget {
   final String title;
@@ -57,44 +61,66 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
 
   @override
   void initState() {
+    socket.connect();
+
+    initSocket();
     print("Init application");
+
     super.initState();
-    WidgetsBinding.instance!.addObserver(this);
+    WidgetsBinding.instance.addObserver(this);
+
     setState(() {
       initPlatformState();
     });
   }
 
+  void initSocket() {
+    socket.onConnect((_) {
+      print('Connection established');
+      _listenAudioFinal();
+    });
+
+    socket.emit("join-room-walkie-talkie",
+        ["${widget.title}", "${widget.randomNumber}"]);
+
+    socket.onDisconnect((_) => print('Connection Disconnection : ${_}'));
+    socket.onConnectError((err) => print(err));
+    socket.onError((err) => print(err));
+  }
+
   void _controlPage(int index) => setState(() => page = index);
 
   // Responsible for switching between recording / idle state
-  void _controlMicStream({Command command: Command.change}) async {
+  Future<void> _controlMicStream({Command command: Command.change}) async {
+    // print("command is : ${command}");
+    // print("record is : ${isRecording}");
+
     switch (command) {
       case Command.change:
-        _changeListening();
+        await _changeListening();
         break;
       case Command.start:
-        _startListening();
+        await _startListening();
         break;
       case Command.stop:
-        _stopListening();
+        await _stopListening();
         break;
     }
   }
 
-  Future<bool> _changeListening() async =>
-      !isRecording ? await _startListening() : _stopListening();
+  Future<Object> _changeListening() async =>
+      !isRecording ? await _startListening() : await _stopListening();
 
   late int bytesPerSample;
   late int samplesPerSecond;
 
   Future<bool> _startListening() async {
-    print("START LISTENING");
+    // print("START LISTENING : RECORD IS $isRecording");
     if (isRecording) return false;
     // if this is the first time invoking the microphone()
     // method to get the stream, we don't yet have access
     // to the sampleRate and bitDepth properties
-    print("wait for stream");
+    // print("wait for stream");
 
     // Default option. Set to false to disable request permission dialogue
     MicStream.shouldRequestPermission(true);
@@ -105,17 +131,20 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
         sampleRate: 48000,
         channelConfig: ChannelConfig.CHANNEL_IN_MONO,
         audioFormat: AUDIO_FORMAT);
+
+    // print("wait for stream record is : $stream");
+
     // after invoking the method for the first time, though, these will be available;
     // It is not necessary to setup a listener first, the stream only needs to be returned first
-    print(
-        "Start Listening to the microphone, sample rate is ${await MicStream.sampleRate}, bit depth is ${await MicStream.bitDepth}, bufferSize: ${await MicStream.bufferSize}");
+
+    // print(
+    //     "Start Listening to the microphone, sample rate is ${await MicStream.sampleRate}, bit depth is ${await MicStream.bitDepth}, bufferSize: ${await MicStream.bufferSize}");
     bytesPerSample = (await MicStream.bitDepth)! ~/ 8;
     samplesPerSecond = (await MicStream.sampleRate)!.toInt();
     localMax = null;
     localMin = null;
 
     // Start listening to the stream
-    //
 
     setState(() {
       isRecording = true;
@@ -124,78 +153,50 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
       //     ?.listen((samples) => {print("ini stream audio ===> ${samples}")});
     });
 
+    // print("wait for stream record is : $isRecording");
     visibleSamples = [];
-    listener = stream!.listen(_calculateSamples);
-    // listener = stream!.listen(_listenStream);
+    listener = stream!.listen(_calculateSamples, onError: (error) {
+      print("error listen : ${error}");
+    });
 
     return true;
   }
 
   void _calculateSamples(samples) {
     if (page == 0)
-      _calculateWaveSamples(samples);
+      // _calculateWaveSamples(samples);
+      print("halo");
     else if (page == 1) {
-      _calculateIntensitySamples(samples);
+      // _calculateIntensitySamples(samples);
       _listenStream(samples);
-    }
-  }
-
-  void _calculateWaveSamples(samples) {
-    bool first = true;
-    visibleSamples = [];
-    int tmp = 0;
-    for (int sample in samples) {
-      if (sample > 128) sample -= 255;
-      if (first) {
-        tmp = sample * 128;
-      } else {
-        tmp += sample;
-        visibleSamples.add(tmp);
-
-        localMax ??= visibleSamples.last;
-        localMin ??= visibleSamples.last;
-        localMax = max(localMax!, visibleSamples.last);
-        localMin = min(localMin!, visibleSamples.last);
-
-        tmp = 0;
-      }
-      first = !first;
-    }
-    print(visibleSamples.length);
-  }
-
-  void _calculateIntensitySamples(samples) {
-    currentSamples ??= [];
-    int currentSample = 0;
-    eachWithIndex(samples, (i, int sample) {
-      currentSample += sample;
-      if ((i % bytesPerSample) == bytesPerSample - 1) {
-        currentSamples!.add(currentSample);
-        currentSample = 0;
-      }
-    });
-
-    if (currentSamples!.length >= samplesPerSecond / 10) {
-      visibleSamples
-          .add(currentSamples!.map((i) => i).toList().reduce((a, b) => a + b));
-      localMax ??= visibleSamples.last;
-      localMin ??= visibleSamples.last;
-      localMax = max(localMax!, visibleSamples.last);
-      localMin = min(localMin!, visibleSamples.last);
-      currentSamples = [];
-      setState(() {});
     }
   }
 
   void _listenStream(samples) {
     // print(
     //     "ini audio stream ${widget.title} dari room ${widget.randomNumber} ===> ${samples}");
+
+    socket.emit('audioMessage',
+        "ini audio stream ${widget.title} dari room ${widget.randomNumber}");
+
+    // Menutup koneksi socket setelah selesai
+    // socket.close();
   }
 
-  bool _stopListening() {
+  void _listenAudioFinal() {
+    socket.on('audioFinal', (data) {
+      // Meng-handle data audio final yang diterima dari server
+      print('Menerima audio final: $data');
+
+      // Lakukan tindakan lain sesuai kebutuhan Anda
+    });
+  }
+
+  Future<bool> _stopListening() async {
     if (!isRecording) return false;
     print("Stop Listening to the microphone");
-    listener?.cancel();
+
+    await listener?.cancel();
 
     setState(() {
       isRecording = false;
@@ -230,6 +231,11 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
       (isRecording) ? Icon(Icons.stop) : Icon(Icons.keyboard_voice);
 
   @override
+  void didChangeDependencies() async {
+    super.didChangeDependencies();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData.dark(),
@@ -238,7 +244,9 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
             title: Text('ROOM | ${widget.randomNumber}'),
           ),
           floatingActionButton: FloatingActionButton(
-            onPressed: _controlMicStream,
+            onPressed: () async {
+              await _controlMicStream();
+            },
             child: _getIcon(),
             foregroundColor: _iconColor,
             backgroundColor: _getBgColor(),
@@ -268,17 +276,6 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Expanded(
-                    //   child: CustomPaint(
-                    //     painter: WavePainter(
-                    //       samples: visibleSamples,
-                    //       color: _getBgColor(),
-                    //       localMax: localMax,
-                    //       localMin: localMin,
-                    //       context: context,
-                    //     ),
-                    //   ),
-                    // ),
                     Center(
                       child: Text(
                         widget.title,
@@ -317,73 +314,12 @@ class _MicStreamExampleAppState extends State<MicStreamExampleApp>
 
   @override
   void dispose() {
+    socket.disconnect();
+    socket.dispose();
     listener?.cancel();
     controller.dispose();
-    WidgetsBinding.instance!.removeObserver(this);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-}
-
-class WavePainter extends CustomPainter {
-  int? localMax;
-  int? localMin;
-  List<int>? samples;
-  late List<Offset> points;
-  Color? color;
-  BuildContext? context;
-  Size? size;
-
-  // Set max val possible in stream, depending on the config
-  // int absMax = 255*4; //(AUDIO_FORMAT == AudioFormat.ENCODING_PCM_8BIT) ? 127 : 32767;
-  // int absMin; //(AUDIO_FORMAT == AudioFormat.ENCODING_PCM_8BIT) ? 127 : 32767;
-
-  WavePainter(
-      {this.samples, this.color, this.context, this.localMax, this.localMin});
-
-  @override
-  void paint(Canvas canvas, Size? size) {
-    this.size = context!.size;
-    size = this.size;
-
-    Paint paint = new Paint()
-      ..color = color!
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    if (samples!.length == 0) return;
-
-    points = toPoints(samples);
-
-    Path path = new Path();
-    path.addPolygon(points, false);
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldPainting) => true;
-
-  // Maps a list of ints and their indices to a list of points on a cartesian grid
-  List<Offset> toPoints(List<int>? samples) {
-    List<Offset> points = [];
-    if (samples == null)
-      samples = List<int>.filled(size!.width.toInt(), (0.5).toInt());
-    double pixelsPerSample = size!.width / samples.length;
-    for (int i = 0; i < samples.length; i++) {
-      var point = Offset(
-          i * pixelsPerSample,
-          0.5 *
-              size!.height *
-              pow((samples[i] - localMin!) / (localMax! - localMin!), 5));
-      points.add(point);
-    }
-    return points;
-  }
-
-  double project(int val, int max, double height) {
-    double waveHeight =
-        (max == 0) ? val.toDouble() : (val / max) * 0.5 * height;
-    return waveHeight + 0.5 * height;
   }
 }
 
@@ -410,16 +346,4 @@ class Statistics extends StatelessWidget {
               : "Not recording"))),
     ]);
   }
-}
-
-Iterable<T> eachWithIndex<E, T>(
-    Iterable<T> items, E Function(int index, T item) f) {
-  var index = 0;
-
-  for (final item in items) {
-    f(index, item);
-    index = index + 1;
-  }
-
-  return items;
 }

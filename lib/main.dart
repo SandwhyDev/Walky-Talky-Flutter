@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:openid_client/openid_client_io.dart';
 import 'package:url_launcher/url_launcher.dart';
 import "Home.dart";
+import 'dart:math';
+import "cobaMic.dart";
+
+String generateRandomNumber() {
+  Random random = Random();
+  int first =
+      random.nextInt(900) + 100; // Menghasilkan angka acak dari 100 hingga 999
+  int second = random.nextInt(900) + 100;
+  int third = random.nextInt(900) + 100;
+  return '$first-$second-$third'; // Menggabungkan angka-angka tersebut dengan tanda hubung (-)
+}
 
 void main() {
   runApp(const MyApp());
@@ -107,9 +118,33 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             ElevatedButton(
               onPressed: () {
-                auth(context);
+                // auth(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => Home(
+                      title: generateRandomNumber(),
+                      desc: "tust",
+                    ),
+                  ),
+                );
               },
               child: Text('Login'),
+            ),
+            SizedBox(
+                height:
+                    16), // Mengatur jarak antara tombol sebelumnya dan tombol baru
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SimpleMicStreamApp(
+                        title: generateRandomNumber(), user: "jhon doe"),
+                  ),
+                );
+              },
+              child: Text('Simple Mic Stream'),
             ),
           ],
         ),
