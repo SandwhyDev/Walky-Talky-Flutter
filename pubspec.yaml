@@ -37,11 +37,15 @@ dependencies:
   cupertino_icons: ^1.0.2
   openid_client: ^0.4.7
   url_launcher: ^6.0.14
-  flutter_audio_recorder3: ^0.0.5
+  # flutter_audio_recorder3: ^0.0.5
   permission_handler: ^10.2.0
-  path_provider: ^1.6.1
+  path_provider: ^2.0.2
   mic_stream: ^0.6.5
   socket_io_client: ^2.0.2
+  flutter_sound: ^9.1.9
+  # audioplayers: ^0.16.1
+  # flutter_sound: ^6.0.1
+  # just_audio: ^0.1.10
 
 dependency_overrides:
   platform: ^3.1.0
