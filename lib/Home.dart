@@ -1,6 +1,7 @@
 import 'package:coba/newMic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mic_stream/mic_stream.dart';
 import 'DetailPage.dart';
 import 'dart:math';
 import "testMic.dart";

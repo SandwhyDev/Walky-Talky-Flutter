@@ -1,16 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
+// import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
+import 'package:coba/testMic.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:mic_stream/mic_stream.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 const AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 FlutterSound myPlayer = FlutterSound();
+const blockSize = 4096;
 
 void main() {
   runApp(SimpleMicStreamApp(
@@ -44,12 +49,13 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     super.initState();
     _initAudioPlayer();
     initSocket();
+    Isolate.spawn(runInBackground, null);
   }
 
   void _initAudioPlayer() async {
     await myPlayer.thePlayer.openPlayer();
     await myPlayer.thePlayer.startPlayerFromStream(
-        codec: Codec.pcm16, numChannels: 1, sampleRate: 32000);
+        codec: Codec.pcm16, numChannels: 1, sampleRate: 48000);
   }
 
   void initSocket() {
@@ -77,6 +83,8 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     //   isRecording = !isRecording;
     // });
 
+    print(isRecording);
+
     if (isRecording) {
       startMicStream();
     } else {
@@ -90,7 +98,7 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     stream = await MicStream.microphone(
         audioSource: AudioSource.DEFAULT,
         // sampleRate: 1000 * (rng.nextInt(50) + 30),
-        sampleRate: 32000,
+        sampleRate: 48000,
         channelConfig: ChannelConfig.CHANNEL_IN_MONO,
         audioFormat: AUDIO_FORMAT);
 
@@ -99,26 +107,23 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     localMax = null;
     localMin = null;
 
-    listener = stream!.listen(_calculateSamples, onError: (error) {
-      print("error listen : ${error}");
-    });
+    if (isRecording) {
+      listener = stream!.listen(_calculateSamples, onError: (error) {
+        print("error listen : ${error}");
+      });
+    }
   }
 
   void _calculateSamples(samples) async {
     if (samples.isNotEmpty) {
-      // print(samples);
+      print(samples);
 
-      //await myPlayer.thePlayer.feedFromStream(samples);
-      //myPlayer.thePlayer.foodSink!.add(FoodData(samples));
+      Uint8List audioData = Uint8List.fromList(samples);
 
-      socket.emit('audioMessage', samples);
+      // myPlayer.thePlayer.foodSink?.add(FoodData(audioData));
+
+      socket.emit('audioMessage', audioData);
     }
-  }
-
-  void stopMicStream() {
-    listener?.cancel();
-    listener = null;
-    stream = null;
   }
 
   bool isPlayerRunning = false;
@@ -127,41 +132,31 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
     var i = 0;
     socket.on('audioFinal', (data) async {
       if (!isPlayerRunning) {
-        //isPlayerRunning = true;
         print("test 1");
 
-        //try {
-        // Convert the string representation of byte array to List<int>
-        //List<int> byteArray = jsonDecode(data).cast<int>();
-
-        // Convert List<int> to Uint8List
         Uint8List audioData = Uint8List.fromList(data);
 
-        // Feed the audio data to the player
-        //if (audioData.isNotEmpty) {
-        i++;
+        // await myPlayer.thePlayer.startPlayerFromStream(
+        //     codec: Codec.pcm16, numChannels: 1, sampleRate: 48000);
 
-        //if (data.isNotEmpty) {
-        //await myPlayer.thePlayer.feedFromStream(audioData);
-        myPlayer.thePlayer.foodSink!.add(FoodData(audioData));
-        //}
-
-        //}
-        //print(audioData);
-        // print(audioData);
-
-        // await myPlayer.thePlayer.stopPlayer();
-        //} catch (e) {
-        //  print('Error playing audio: $e');
-        //}
+        myPlayer.thePlayer.foodSink?.add(FoodData(audioData));
+        print(audioData);
 
         print(("cek stop"));
-
-        //isPlayerRunning = false;
-        //await Future.delayed(Duration(milliseconds: 100));
-        //await myPlayer.thePlayer.stopPlayer();
       }
     });
+  }
+
+  void stopMicStream() {
+    listener?.cancel();
+    listener = null;
+    stream = null;
+  }
+
+  void runInBackground(Null message) {
+    // Memulai kode untuk dijalankan di isolate terpisah
+    _listenAudioFinal();
+    print('halo');
   }
 
   @override
@@ -184,7 +179,9 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
           ),
           title: Row(
             children: [
-              Text(widget.title),
+              Text(
+                widget.title,
+              ),
               SizedBox(width: 8),
             ],
           ),
