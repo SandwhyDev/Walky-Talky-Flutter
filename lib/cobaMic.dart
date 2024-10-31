@@ -59,11 +59,13 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
   }
 
   void initSocket() {
-    socket = IO.io('http://192.168.0.42:3030',
+    socket = IO.io('http://192.168.1.228:3030',
         IO.OptionBuilder().setTransports(['websocket']).build());
 
     socket.onConnect((_) {
       print('Connected');
+      socket.emit('client', "halo server");
+
       _listenAudioFinal();
       // Socket is connected, you can send messages
     });
@@ -72,6 +74,7 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
 
     socket.onDisconnect((_) {
       print('Disconnected');
+
       // Handle socket disconnection
     });
 
@@ -93,6 +96,7 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
   }
 
   Future<void> startMicStream() async {
+    print("halo ini mic");
     MicStream.shouldRequestPermission(true);
 
     stream = await MicStream.microphone(
@@ -155,6 +159,7 @@ class _SimpleMicStreamAppState extends State<SimpleMicStreamApp> {
 
   void runInBackground(Null message) {
     // Memulai kode untuk dijalankan di isolate terpisah
+    startMicStream();
     _listenAudioFinal();
     print('halo');
   }
